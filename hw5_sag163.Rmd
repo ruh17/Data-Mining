@@ -1,0 +1,375 @@
+---
+title: "Homework 5"
+author: "Sai Rakesh Ghanta"
+date: "March 27, 2017"
+output: word_document
+---
+
+## Task 1 (Text Mining): analyze the topical clusters from text data
+   Dataset & description: http://www.cs.umb.edu/~smimarog/textmining/datasets/
+   Data csv: http://www.yurulin.com/class/spring2017_datamining/data/Newsgroup.csv
+  
+  
+```{r}
+# hw5-sample.R - sample code for hw5
+#
+# @author: Yu-Ru Lin
+# @date: 03/27/2017
+# modified by Sai Rakesh Ghanta
+
+# importing required packages
+library(plyr)
+library(ggplot2)
+library(tm)
+library(SnowballC)
+library(lsa)
+library(NMF)
+library(Matrix)
+
+# Loading the data set
+
+ifilename = "http://www.yurulin.com/class/spring2017_datamining/data/Newsgroup.csv"
+newsgroup = read.csv(ifilename)
+dim(newsgroup)
+
+newsgroup[1:2, ]
+
+```
+
+# 1) Plot the histogram of number of documents per topic. Find and list the four most popular topics in terms of   number of documents.
+
+
+```{r}
+
+
+# histogram of number of documents per topic
+
+topic<-as.data.frame(summary(newsgroup$Topic))
+topic<-cbind(rownames(topic),topic)
+colnames(topic)<-c("Topics","Count")
+
+ggplot(topic, aes(x = reorder(Topics, -Count),y=Count)) + 
+  geom_histogram(stat = "identity")+
+  labs(list(title="Histogtam of number of documents per topic",x="Topics",y="Count"))+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# finding the four most popular topics
+
+topics.popular <- sort(table(sample(newsgroup$Topic)), decreasing = T)[1:4]
+select.topics <- names(topics.popular)
+topics.popular
+
+```
+
+# 2) Extract contents in these top 4 topics as your corpus. Run pre-processing on this corpus and use terms that appear at least four times in the corpus to create a term-document matrix. Use the term-document matrix to generate an MDS plot where each node represents a document with color indicating its topic.
+
+```{r}
+doc.idx = which(newsgroup$Topic %in% select.topics)
+dataset = newsgroup[doc.idx, ]
+
+## create a corpus
+corpus = Corpus(VectorSource(dataset$Content))
+corpus
+
+corpus <- tm_map(corpus, content_transformer(tolower)) ## converting text to lower case
+corpus = tm_map(corpus, removePunctuation) ## removing punctuations
+corpus = tm_map(corpus, removeNumbers) ## removing numbers 
+corpus = tm_map(corpus, function(x) removeWords(x, stopwords("english"))) ## removing stopwords 
+corpus = tm_map(corpus, stemDocument, language = "english")   ## stemming
+corpus = tm_map(corpus, stripWhitespace)
+inspect(corpus[1:10])
+
+tdm<-TermDocumentMatrix(corpus)
+td.mat = as.matrix(tdm)
+dim(td.mat) ## dimension of term-doc matrix
+
+## using terms that appear at least four times
+
+doc.idx.4<-which(rownames(td.mat) %in% findFreqTerms(tdm, 4))
+td.mat.4<-td.mat[doc.idx.4,]
+
+dist.mat.4<-dist(t(td.mat.4))  ## compute distance matrix
+
+doc.mds.4<-cmdscale(dist.mat.4, k=2)
+data = data.frame(x = doc.mds.4[, 1], y = doc.mds.4[, 2], topic = dataset$Topic)
+
+## MDS Plot 
+
+ggplot(data, aes(x = x, y = y, color = topic)) + geom_point()+ ggtitle("MDS plot")
+
+```
+
+# 3) Apply TFIDF weighting, latent semantic analysis (LSA) and non-negative matrix factorization (NMF) on the term-document matrix. Generate MDS plots corresponding to these matrices (TFIDF weighted matrix, LSA approximated matrix, and NMF approximated matrix).
+
+```{r}
+
+Sys.setenv(NOAWT= "true")
+
+do.svd <- function(data.mat, k) {
+  S<-svd(as.matrix(data.mat), nu=k, nv=k)
+  u<-S$u
+  s<-S$d
+  v<-S$v
+  td.mat.svd <- u %*% diag(s[1:k]) %*% t(v)
+  td.mat.svd
+}
+
+do.plot<-function(dist.mat, k, dataset, title){
+  doc.mds<-cmdscale(dist.mat, k)
+  data<-data.frame(x=doc.mds[,1], y=doc.mds[,2], topic=dataset$Topic)
+  ggplot(data, aes(x = x, y = y, color = topic)) +
+    geom_point()+ 
+    ggtitle(title)
+}
+
+## tf-idf weighting
+
+td.mat.w.tf<-lw_tf(td.mat.4)*gw_idf(td.mat.4)
+dist.mat.tf<-dist(t(as.matrix(td.mat.w.tf)))
+do.plot(dist.mat.tf, 2, dataset, "MDS plot - tfidf")
+
+## LSA
+lsa.space<-lsa(td.mat.w.tf, dims=3)
+dist.mat.lsa<-dist(t(as.textmatrix(lsa.space)))
+do.plot(dist.mat.lsa, 2, dataset, "MDS plot - LSA")
+
+## NMF
+set.seed(1)
+res<-nmf(td.mat.4, 3, "lee")
+V.hat<-fitted(res)
+dim(V.hat)
+dist.mat.nmf<-dist(t(as.matrix(V.hat)))
+do.plot(dist.mat.nmf, 2, dataset, "MDS plot - NMF")
+```
+
+# 4) Write down your observation based on these plots.
+
+For the first MDS plot before the weighting, it is clearly shown that the four topics are marginally clustered together with some outliers. But, after weighting, most topics are still related to each other with spread of sports topics outliers. The LSA also has grouped those topics together because of the similarity that finds the association among words. NMF performs much better since we are using Term-Document matrix and the factorization divided that to different entities. There are strictly constrained edges in the MDS by NMF, while in others it is not. It is because the coordinates in MDS are transformed from non-negative matrices who have strict borders.
+
+## Task 2 (Network Analysis): create a movie-movie network and identify the community structure and central nodes 
+    Download the movie rating dataset (MovieLens 100k) from: http://grouplens.org/datasets/movielens/
+    Read the dataset description:http://files.grouplens.org/datasets/movielens/ml-100k-README.txt
+  
+```{r}
+# importing required libraries
+library(anytime)
+library(igraph)
+
+# Loading the data sets 
+movie <- read.table("http://files.grouplens.org/datasets/movielens/ml-100k/u.data", header = FALSE)
+colnames(movie) <- c("user id","item id","rating","timestamp")
+
+items <- read.delim("http://files.grouplens.org/datasets/movielens/ml-100k/u.item", sep = "|", header= FALSE, stringsAsFactors = FALSE)
+colnames(items) <-c("movie id", "movie title", "release date","video release date", "IMDb URL", "unknown", "Action", "Adventure", "Animation", "Children", "Comedy", "Crime", "Documentary", "Drama", "Fantasy", "Film-Noir", "Horror", "Musical", "Mystery", "Romance", "Sci-Fi", "Thriller", "War", "Western")
+
+## Merging both the datasets
+dataset <- merge(movie, items, by.x = "item id", by.y = "movie id", all = TRUE)
+
+```
+
+# 1) Create a movie-to-movie co-rating network. Load u.data dataset, and extract data where the ratings are generated after timestamp 03/20/1998 00:00:00 and equal to rating 5. Extract the top 30 most frequently rated movies as the nodes. Generate a network with edge weights >= 10, i.e., two movies have a link if they are rated by at least 10 common users. Load u.item to replace movieID with movies titles. List the names of the top 10 movies and their number of ratings
+
+```{r}
+
+## ratings generated after timestamp 03/20/1998 00:00:00 and equal to rating 5
+dataset_new <- dataset[which(dataset$timestamp > 890352000),]
+dataset_new<-dataset_new[which(dataset_new$rating == 5),]
+
+## Extracting the top 30 most frequently rated movies as the nodes
+popular.30<- data.frame(sort(table(dataset_new$`movie title`), decreasing = T)[1:30])
+colnames(popular.30) <- c("Movie title","Frequency")
+df <- dataset_new[dataset_new$`movie title` %in% popular.30$`Movie title`, ]
+df <- df[,c(2,5,3,4)]
+
+## creating movie-movie co-rating network
+graph_df = graph.data.frame(df, directed = T)
+mat <- get.adjacency(graph_df)
+m2 <- t(mat) %*% mat
+movie.idx = which(colSums(m2) > 0)
+movie.mat = m2[movie.idx, movie.idx]
+diag(movie.mat) = 0  
+movie.idx = which(colSums(movie.mat) > 0)
+movie.mat = movie.mat[movie.idx, movie.idx]
+dim(movie.mat)
+movie.mat[1:3, ]
+rownames(movie.mat)[order(colSums(movie.mat), decreasing = T)[1:10]]
+movie.mat[which(movie.mat < 10)] <- 0
+g = graph.adjacency(movie.mat, weighted = T, mode = "undirected", diag = F)
+set.seed(1)
+plot(g, layout = layout.fruchterman.reingold, vertex.label = V(g)$name)
+plot(g, layout = layout.fruchterman.reingold, vertex.size = 4, vertex.label.cex = 0.5)
+
+## List of the names of top 10 movies and their frequency
+popular_10 <- popular.30[1:10,]
+popular_10
+
+```
+
+# 2) Identify the community structure in the network by using the modularity-based community detection algorithm. Plot the network with the detected community structure (use 'plot') and the dendrogram (use 'dendPlot').
+
+```{r}
+## get modularity-based community
+fc = fastgreedy.community(g)
+modularity(fc)
+membership(fc)
+set.seed(1)
+plot(fc, g, main = "modularity community", layout = layout.fruchterman.reingold, vertex.label.cex = 0.5)
+
+dendPlot(fc) ## dendogram
+
+```
+
+# 3) Identify the most central nodes in the network based on different centrality measures, degree centrality, closeness centrality, betweenness centrality, and PageRank. Plot different networks where the nodes are sized based on the centrality measures. Highlight the top 5 nodes with the highest centrality measures in each network.
+
+```{r}
+set.seed(10)
+deg = degree(g)
+top = order(deg, decreasing = T)[1:5]
+
+## size node by degree
+V(g)$size = abs(deg) * 2
+V(g)$color = "gray"
+V(g)$label.color = "orange"
+V(g)$label.cex = 0.8
+E(g)$color = "black"
+V(g)[top]$label.color = "black"  ## highlight the top-5 nodes
+V(g)[top]$label.cex = 1
+V(g)[top]$color = "Skyblue"
+set.seed(1)
+plot(g, layout = layout.circle)
+title("degree centrality")
+
+## compute node closeness centrality
+clo = closeness(g)
+clo
+top = order(clo, decreasing = T)[1:5]
+
+## size node by closeness
+V(g)$size = abs(clo)^2 * 1e+05
+V(g)$color = "gray"
+V(g)$label.color = "black"
+V(g)$label.cex = 0.5
+V(g)[top]$label.color = "red"  ## highlight the top-5 nodes
+V(g)[top]$label.cex = 1
+set.seed(1)
+plot(g, layout= layout.sphere)
+title("closeness")
+
+## compute node betweenness centrality
+bet = betweenness(g)
+bet
+top = order(bet, decreasing = T)[1:5]
+
+## size node by betweenness
+V(g)$size = abs(bet) * 0.1
+V(g)$color = "green"
+V(g)$label.color = "blue"
+V(g)$label.cex = 0.5
+V(g)[top]$label.color = "red"  ## highlight the top-5 nodes
+V(g)[top]$label.cex = 1
+set.seed(1)
+plot(g, layout = layout.sphere)
+title("betweenness")
+
+
+## compute pagerank
+page = page.rank(g)$vector
+top = order(page,decreasing=T)[1:5]
+## size node by pagerank
+V(g)$size = abs(page) * 250
+V(g)$label.color = "black"
+V(g)[ top ]$label.color = "red" ## highlight the top-5 nodes
+set.seed(1)
+plot(g)
+title("PageRank")
+```
+
+# 4) Write down your observation based on these plots.
+
+High-ranked nodes are calculated by degree centrality by checking who has the densest network around them. Closeness terms how easily one node could reach all other nodes in the network. Betweenness shows how likely shortest paths would pass by a particular node. A node tends to have higher PageRank if nodes connecting to it also has high PageRank. The page ranking algorithm shows that movies such as Star Wars, Godfather, schindler's List are high ranked which is actually true in real-case.
+
+## Task 3 (Recommendation): create a recommender system based on the book rating data
+
+Download the book rating dataset from: http://www2.informatik.uni-freiburg.de/~cziegler/BX/
+
+In the dataset, load the BX-Book-Ratings.csv & BX-Books.csv data. Extract books published from 1998 to present. Create
+a book rating matrix from these books, and in this matrix, only consider books that were rated by at least 10 users,
+and users that rated at least 10 books. 
+
+```{r}
+## documentation:
+## http://cran.r-project.org/web/packages/recommenderlab/vignettes/recommenderlab.pdf
+
+library(recommenderlab)
+
+## loading data sets
+books <- read.csv("C:/Users/sag163/Desktop/BX-Books.csv", sep = ";", header = T)
+rated <- read.csv("C:/Users/sag163/Desktop/BX-Book-Ratings.csv", sep = ";", header = T)
+
+dim(books)
+dim(rated)
+books[1:3,]
+rated[1:3,]
+
+
+## filtering out abnormal values in the datasets
+
+bookrating <- merge(books, rated)
+bookrating$Year.Of.Publication <- as.numeric(as.character(bookrating$Year.Of.Publication))
+bookrat <- subset(bookrating, bookrating$Year.Of.Publication > 1997)
+bookrat <- subset(bookrat, bookrat$Year.Of.Publication < 2018) 
+dim(bookrat)
+d4 = data.frame(from = bookrat$User.ID, to = bookrat$ISBN, weight = bookrat$Book.Rating) 
+g4 = graph.data.frame(d4) 
+mat4 = get.adjacency(g4)
+mat.w4 = get.adjacency(g4, attr = "weight")  
+
+movie.idx = which(colSums(mat4)>=10)
+user.idx = which(rowSums(mat4)>=10)
+rmat = mat.w4[user.idx, movie.idx]
+dim(rmat) 
+
+m = as.matrix(rmat)
+m = as(m, "realRatingMatrix")
+dim(m)
+```
+
+# 1) Run and test a recommender system built with different recommendation methods, including random, popular, user-based collaborative filtering, item-based collaborative filtering. Evaluate the different methods by using k-fold cross-validation (k=4). Generate a performance table in terms of performance measures MAE, MSE and RMSE.
+
+```{r}
+
+scheme <- evaluationScheme(m, method="cross-validation", k=4, given=-1, goodRating=6)
+scheme
+
+# random
+rr<-Recommender(getData(scheme, "train"), method="RANDOM")
+prr<-predict(rr, getData(scheme, "known"), type="ratings")
+e.prr<-calcPredictionAccuracy(prr, getData(scheme, "unknown"))
+
+# popular
+rp<-Recommender(getData(scheme, "train"), method="POPULAR")
+prp<-predict(rp, getData(scheme, "known"), type="ratings")
+e.prp<-calcPredictionAccuracy(prp, getData(scheme, "unknown"))
+
+# user-based collaborative filtering
+ucf<-Recommender(getData(scheme, "train"), method="UBCF")
+pucf<-predict(ucf, getData(scheme, "known"), type="ratings")
+e.ucf<-calcPredictionAccuracy(pucf, getData(scheme, "unknown"))
+
+# item-based collaborative filtering
+icf<-Recommender(getData(scheme, "train"), method="IBCF")
+picf<-predict(icf, getData(scheme, "known"), type="ratings")
+e.icf<-calcPredictionAccuracy(picf, getData(scheme, "unknown"))
+
+# Performance Table
+
+col.name<-c("Random", "Popular", "UBCF", "IBCF")
+result<-cbind(e.prr, e.prp, e.ucf, e.icf)
+colnames(result)<-col.name
+result
+
+```
+
+# 2) Write down your observation based on the performance table.
+
+Random recommender has the largest errors than other recommendations. This acts as baseline, and other recommenders are better than the baseline. Popular recommender has the best performance, followed by "UBCF" and "IBCF". It may be explained as that the popular best sellers may attract almost everyone's attention so that many people would like to read those books, while the variety of users' preferences and categories of books bring some noise to "UBCF" and "IBCF", so the performances are affected.

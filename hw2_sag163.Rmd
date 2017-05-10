@@ -1,0 +1,414 @@
+---
+title: "hw2_sag163"
+author: "Sai Rakesh Ghanta"
+date: "January 31, 2017"
+output: word_document
+---
+
+# 1) Read the data description on DMR p.297. Identify and report response variable and predictors.
+```{r}
+audit <- read.csv('C:/Users/Sai Rakesh Ghanta/Desktop/audit.csv')
+head(audit) # check out data
+
+```
+
+Response Variables: TARGET_Adjusted 
+and RISK_Adjustment
+
+Predictors (Explanatory Variables): Age, Employment, Education, Marital, Occupation, Income, Gender, Deductions, Hours
+
+
+
+# 2-(a) Generate a summary table for the data. For each numerical variable, list: variable name, mean, median, 1st quartile, 3rd quartile, and standard deviation.
+
+```{r}
+summary(audit) #Summary of the Data set
+
+# Dealing with missing data
+
+any(is.na(audit))
+levels(audit$Employment) = c(levels(audit$Employment), "Unemployed")
+audit$Employment[is.na(audit$Employment)] <- "Unemployed"
+levels(audit$Occupation) = c(levels(audit$Occupation), "No_Occupation")
+audit$Occupation[is.na(audit$Occupation)] <- "No_Occupation"
+any(is.na(audit))
+
+#summary table for numerical variables 
+
+audit_num <- audit[c(2,7,9,10,11)]
+
+
+RowName<-names(audit_num)
+ColumnName<-c("Mean","Median", "1st Qu.", "3rd Qu.", "Sd")
+
+
+age<-c(as.vector(summary(audit$Age))[c(4,3,2,5)],sd(audit$Age))
+income<-c(as.vector(summary(audit$Income))[c(4,3,2,5)],sd(audit$Income))
+deductions<-c(as.vector(summary(audit$Deductions))[c(4,3,2,5)],sd(audit$Deductions))
+hours<-c(as.vector(summary(audit$Hours))[c(4,3,2,5)],sd(audit$Hours))
+risk<-c(as.vector(summary(audit$RISK_Adjustment))[c(4,3,2,5)],sd(audit$RISK_Adjustment))
+Summary_Table<-matrix(c(age,income,deductions,hours,risk), nrow=5, ncol=5, byrow=TRUE, dimnames=list(RowName, ColumnName))
+
+# List of variable name, mean, median, 1st quartile, 3rd quartile and Sd.
+
+Summary_Table #Summary Table
+
+```
+
+# 2-(b) For numerical variables, plot the density distribution. Describe whether the variable has a normal distribution or certain type of skew distribution.
+
+
+```{r}
+# density distribution 
+library(ggplot2) # Loading Library: ggplot2
+ggplot(audit, aes(x = audit$Age)) + geom_density()
+ggplot(audit, aes(x = audit$Income)) + geom_density()
+ggplot(audit, aes(x = audit$Deductions)) + geom_density()
+ggplot(audit, aes(x = audit$Hours)) + geom_density()
+ggplot(audit, aes(x = audit$RISK_Adjustment)) + geom_density()
+
+library(e1071) # Loading Library: e1071
+skewness(audit$Age)
+skewness(audit$Income)
+skewness(audit$Deductions)
+skewness(audit$Hours)
+skewness(audit$RISK_Adjustment)
+
+
+qqnorm(audit$Age)
+qqline(audit$Age)
+qqnorm(audit$Income)
+qqline(audit$Income)
+qqnorm(audit$Deductions)
+qqline(audit$Deductions)
+qqnorm(audit$Hours)
+qqline(audit$Hours)
+qqnorm(audit$RISK_Adjustment)
+qqline(audit$RISK_Adjustment)
+
+
+shapiro.test(audit$Age)
+shapiro.test(audit$Income)
+shapiro.test(audit$Deductions)
+shapiro.test(audit$Hours)
+shapiro.test(audit$RISK_Adjustment)
+```
+
+Skewness values of Income, Deductions, RISK_Adjustment  are larger than +1 meaning that they are highly skewed to the right. 
+
+Skewness values for Age and Hours are moderately skewed to the right (between 0 and +0.5).
+ 
+# 2-(c) For each categorical predictor, generate the conditional histogram plot of response variable.
+
+```{r}
+# conditional histograms
+library(lattice) # Loading Library: lattice
+histogram(~audit$TARGET_Adjusted|audit$Employment,data=audit,layout=c(1,9),col="black")
+histogram(~audit$RISK_Adjustment|audit$Employment,data=audit,layout=c(1,9),col="black")
+histogram(~audit$TARGET_Adjusted|audit$Education,data=audit,layout=c(1,16),col="black")
+histogram(~audit$RISK_Adjustment|audit$Education,data=audit,layout=c(1,16),col="black")
+histogram(~audit$TARGET_Adjusted|audit$Marital,data=audit,layout=c(1,6),col="black")
+histogram(~audit$RISK_Adjustment|audit$Marital,data=audit,layout=c(1,6),col="black")
+histogram(~audit$TARGET_Adjusted|audit$Occupation,data=audit,layout=c(1,15),col="black")
+histogram(~audit$RISK_Adjustment|audit$Occupation,data=audit,layout=c(1,15),col="black")
+histogram(~audit$TARGET_Adjusted|audit$Gender,data=audit,layout=c(1,2),col="black")
+histogram(~audit$RISK_Adjustment|audit$Gender,data=audit,layout=c(1,2),col="black")
+
+```
+
+# 2-(d) For each numerical predictor, describe its relationship with the response variable through correlation and scatterplot.
+
+```{r}
+cor(audit_num) #correlation
+
+library(car) # Loading Library: car
+
+#Scatter Plot Matrix
+
+suppressWarnings(scatterplotMatrix(audit_num, spread = FALSE, lty.smooth = 2, main = 'Scatter Plot Matrix'))
+
+```
+
+# 3-(a) Implement a 10-fold cross-validation scheme by splitting the data into training and testing sets. Use the training set to train a logistic regression model to predict the response variable. Examine the performance of different models by varing the number of predictors. Report the performance of the models on testing set using proper measures (accuracy, precision, recall, F1, AUC) and plots (ROC, lift).
+
+```{r}
+# using the ROCR package to graph the ROC curves
+suppressWarnings(library(ROCR)) # Loading Library: ROCR
+suppressWarnings(library(cvTools)) # Loading Library: cvTools
+
+audit_new <- data.frame(audit)
+audit_new <- audit_new[,c(-1,-11)] #omit unused variables 
+
+# create design matrix
+predictors<-model.matrix(TARGET_Adjusted~., data=audit_new)[,-1] 
+train<-NULL
+
+# creating a function to perform 10-fold cross validation using cvFolds (cvTools Package). 
+
+cross_Validation<-function(formula, fold=10){
+  folds<-cvFolds(nrow(audit_new), K=fold) # creating folds
+  errors<-dim(fold) # error
+  precisions<-dim(fold) # precision
+  recalls<-dim(fold) #recall
+  fscores<-dim(fold) #f1
+  probs<-NULL
+  actuals<-NULL
+  
+  for(i in (1:fold)){
+    train<-which(folds$which!=i) # training set
+    test<-which(folds$which==i) # testing set
+    
+    model<-glm(formula, family=binomial(link="logit"), data=audit_new, subset=train)
+    
+    # prediction: predicted default probabilities for cases in test set
+    prob<-predict(model, audit_new[test,], type=c("response"))
+    # measuring errors: coding as 1 if probability 0.5 or larger
+    predicted<-floor(prob+0.5) # use floor function to clamp the value to 0 or 1
+    actual<-audit_new[test,]$TARGET_Adjusted
+    conf.matrix<-table(actual, predicted)
+    conf.matrix
+    error<-(conf.matrix[1,2]+conf.matrix[2,1])/nrow(audit_new[test,])
+    errors[i]<-error
+    
+    # Precision
+    if(conf.matrix[1,2]+conf.matrix[2,2]==0)
+      precision<-0
+    else
+      precision<-conf.matrix[2,2]/(conf.matrix[1,2]+conf.matrix[2,2])
+    precisions[i]<-precision
+    
+    # recall
+    
+    if(conf.matrix[2,1]+conf.matrix[2,2]==0)
+      recall<-0
+    else
+      recall<-conf.matrix[2,2]/(conf.matrix[2,1]+conf.matrix[2,2])
+    recalls[i]<-recall
+    
+    #F1 Score formula
+    
+    fscore<-(2 * precision * recall)/(precision + recall)
+    fscores[i]<-fscore
+    
+    probs<-c(probs, prob)
+    actuals<-c(actuals, actual)
+  }
+  
+  model<-glm(formula, family=binomial(link="logit"), data = audit_new)
+  print(summary(model))
+  
+  avg_error<-mean(errors)
+  avg_precision<-mean(precisions)
+  avg_recall<-mean(recalls)
+  avg_fscore<-mean(fscores)
+  
+  # AUC
+  
+   library(rms)
+   auc <- rcorr.cens(probs,actuals)[1]
+  # measures (accuracy, precision, recall, F1, AUC, AIC)
+  
+  rowName<-c("Model")
+  columnName<-c("Accuracy", "Precision", "Recall", "F1", "AUC", "AIC")
+  
+  mat<-matrix(c(1-avg_error, avg_precision, avg_recall, avg_fscore, auc, summary(model)$aic), nrow=1, ncol=6, byrow=TRUE, dimnames=list(rowName, columnName))
+  
+  print(mat)
+  
+  ROCAndLift(probs, actuals) # function created for generating ROC and Lift Plots
+  return(mat)
+}
+
+ ROCAndLift<-function(probs, actuals){
+  
+  # ROC
+   
+  df<-data.frame(probs, actuals)
+  pred<-prediction(df$probs, df$actuals)
+  perf<-performance(pred, "tpr", "fpr")
+  plot(perf, main="ROC")
+  
+  # Lift
+  
+    rank.df<-as.data.frame(df[order(probs, decreasing=TRUE),])
+  colnames(rank.df)<-c('predicted', 'actual')
+  # overall success (delay) prob in the evaluation data set
+  baseRate<-mean(actuals)
+  baseRate
+  # calculating the lift
+  # cumulative 1's sorted by predicted values
+  # cumulative 1's using the average success prob from evaluation set
+  total<-length(audit_new$TARGET_Adjusted)
+  ax<-dim(total)
+  ay.base<-dim(total)
+  ay.pred<-dim(total)
+  
+  ax[1]<-1
+  ay.base[1]<-baseRate
+  ay.pred[1]<-rank.df$actual[1]
+  for(i in 2:total){
+    ax[i]<-i
+    ay.base[i]<-baseRate*i # uniformly increase with rate xbar
+    ay.pred[i]<-ay.pred[i-1]+rank.df$actual[i]
+  }
+  
+  plot(ax, ay.pred, xlab="Number of Cases", ylab='Number of Successes', main="Lift")
+  points(ax, ay.base, type="l")
+}
+
+# Model 1
+ 
+f1<- TARGET_Adjusted~Age+Employment+Education+Marital+Income+Gender
+m1<-cross_Validation(f1)
+
+# Model 2
+
+f2<- TARGET_Adjusted~Age+Employment+Education+Income+Gender
+m2<-cross_Validation(f2)
+
+# Model 3
+
+f3<- TARGET_Adjusted~Age+Education+Marital+Income+Gender
+m3<-cross_Validation(f3)
+
+# Model 4
+
+f4<- TARGET_Adjusted~Age+Education+Income+Gender
+m4<-cross_Validation(f4)
+
+```
+
+Best model is Model 3 (TARGET_Adjusted~Age+Education+Marital+Income+Gender) since it has less AIC value.
+
+# 3-(b) For the best model, compute the odds ratio and interpret the effect of each predictors.
+
+```{r}
+
+# Odds Ratio
+
+m3<-glm(f3, family=binomial(link="logit"), data=audit_new)
+require(MASS)
+exp(cbind(coef(m3), confint(m3)))
+exp<-exp(m3$coef)
+
+for(i in 2:length(exp))
+  print(sprintf("%s: %.2f",names(exp)[i],(abs(exp[i]-1))))
+
+# Interpretation of predictors
+
+m<-glm(f3, family=binomial(link="logit"), data=audit_new)
+
+m$aic
+
+m<-glm(TARGET_Adjusted~Education+Marital+Income+Gender, family=binomial(link="logit"), data=audit_new) # if remove 'Age'
+
+m$aic
+
+m<-glm(TARGET_Adjusted~Age+Marital+Income+Gender, family=binomial(link="logit"), data=audit_new) # if remove 'Education'
+
+m$aic
+
+m<-glm(TARGET_Adjusted~Age+Education+Income+Gender, family=binomial(link="logit"), data=audit_new) # if remove 'Marital'
+
+m$aic
+
+m<-glm(TARGET_Adjusted~Age+Education+Marital+Gender, family=binomial(link="logit"), data=audit_new) # if remove 'Income'
+
+m$aic
+
+m<-glm(TARGET_Adjusted~Age+Education+Marital+Income, family=binomial(link="logit"), data=audit_new) # if remove 'Gender'
+
+m$aic
+
+```
+
+Each one of the predictors is removed and AIC values are calculated. From the above results, we can see that removing  Marital will cause the largest AIC value increase. So, Marital is the most important predictor in our model 3.
+
+On contrary we can also see that removing variables Income and Gender betters the model 3.
+
+# 4) Apply linear and non-linear regression analysis to predict RISK_Adjustment. Evaluate the models through cross-validation and on holdout (leave-one-out or 10-fold cross-validation) samples. Provide details similar to HW1.
+
+```{r}
+
+audit_new1 <- data.frame(audit) 
+audit_new1 <- audit_new1[,c(-1,-12)] 
+
+fitA <- lm(RISK_Adjustment~., data = audit_new1) 
+summary(fitA) 
+
+sqrt(mean(residuals(fitA)^2)) # rmse
+
+```
+
+Multiple R-squared = 0.09416, which means the model accounts for 9.41% of the variance in RISK_Adjustment.
+
+Adjust R-squared = 0.07283, means 7.28% of variability in the response RISK_Adjustment.
+
+RMSE is 7937.427, used to measure differences between value predicted by a model of an estimator and value actually observed. It will be used to compare different models.
+
+
+```{r}
+
+leave.one.out <- function(formula, data){
+  n = length(data$RISK_Adjustment)
+  error = dim(n)
+  for(k in 1:n){
+    id = c(1:n)
+    id.train = id[id != k]
+    fit = lm(formula, data = data[id.train, ])
+    predicted = predict(fit, newdata = data[-id.train, ])
+    observation = data$RISK_Adjustment[-id.train]
+    error[k] = predicted - observation
+  }
+  rmse = sqrt(mean(error^2))
+  return(rmse) # out-of-sample rmse
+}
+
+formulaA <- RISK_Adjustment ~ Age+Education+Marital+Income+Gender+Deductions+Hours
+formulaB <- RISK_Adjustment ~ Age+Income+Gender+Deductions+Hours
+formulaC <- RISK_Adjustment ~ poly(Age, degree = 2)+Income+Gender+poly(Deductions, degree = 2)+Hours
+
+leave.one.out(formulaA, audit_new1)
+leave.one.out(formulaB, audit_new1)
+leave.one.out(formulaC, audit_new1)
+
+```
+
+Best model is formulaA (RISK_Adjustment ~ Age+Education+Marital+Income+Gender+Deductions+Hours) since it has less out-of-sample rmse value.
+
+```{r}
+leave.one.out(RISK_Adjustment ~ Education+Marital+Income+Gender+Deductions+Hours, audit_new1)
+# if we remove 'Age'
+
+leave.one.out(RISK_Adjustment ~ Age+Marital+Income+Gender+Deductions+Hours, audit_new1)
+# if we remove 'Education'
+
+leave.one.out(RISK_Adjustment ~ Age+Education+Income+Gender+Deductions+Hours, audit_new1)
+# if we remove 'Marital'
+
+leave.one.out(RISK_Adjustment ~ Age+Education+Marital+Gender+Deductions+Hours, audit_new1)
+# if we remove 'Income'
+
+leave.one.out(RISK_Adjustment ~ Age+Education+Marital+Income+Deductions+Hours, audit_new1)
+# if we remove 'Gender'
+
+leave.one.out(RISK_Adjustment ~ Age+Education+Marital+Income+Gender+Hours, audit_new1)
+# if we remove 'Deductions'
+
+leave.one.out(RISK_Adjustment ~ Age+Education+Marital+Income+Gender+Deductions, audit_new1)
+# if we remove 'Hours'
+
+```
+
+Each one of those predictors is removed and out-of-sample rmse values are calculated. From the above results, we can see that removing  Marital will cause the largest rmse increase. So, Marital is the most important predictor in our model formulaA.
+
+We can also see that the below models are better than formulaA since they have lower out-of-sample rmse values:
+
+RISK_Adjustment ~ Age+Education+Marital+Income+Gender+Hours
+RISK_Adjustment ~ Age+Education+Marital+Gender+Deductions+Hours
+RISK_Adjustment ~ Age+Education+Marital+Income+Deductions+Hours
+
+
+
+
+

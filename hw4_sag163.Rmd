@@ -1,0 +1,318 @@
+---
+title: "Homework 4"
+author: "Sai Rakesh Ghanta"
+date: "March 7, 2017"
+output: word_document
+---
+
+## Task 1
+
+## Loading Data set for Task 1
+```{r}
+load.data.states <- function() {
+  data.url = 'http://www.yurulin.com/class/spring2017_datamining/data/'
+  dataset <- read.csv(sprintf("%s/unempstates.csv",data.url))  
+  print(head(dataset))
+  print(dim(dataset))
+  n = nrow(dataset)
+  t(dataset)
+}
+```
+
+## Function for PCA, screeplot, scatterplot and loadings plot.
+
+```{r}
+do.pca <- function(dataset, lbls, do.screeplot=F, do.scatter=F, do.biplot=F, do.loadingplot=F) {
+  data.pca = prcomp(dataset, scale=TRUE, center=TRUE) 
+  # the loadings
+  data.pca$rotation
+  
+  # use 'predict' to project data onto the loadings
+  data.pc = predict(data.pca)
+  data.pc
+  
+  # Screeplot
+  if (do.screeplot){
+    plot(data.pca, main="")
+    mtext(side=1,"screeplot for PCA", line=1, font=2)
+  } 
+  
+  # Scatter Plot
+  if (do.scatter) {
+    plot(data.pc[,1:2], type="n")
+    text(x=data.pc[,1], y=data.pc[,2], labels=lbls, cex=0.9)    
+  }
+  
+  # Bi plot
+  if (do.biplot) 
+    biplot(data.pca)
+  
+  # Loadings of PC 1
+  if (do.loadingplot) {
+    plot(data.pca$rotation[,1],type='l')
+    # plot(data.pc[,1],type='p')
+    mtext(side=3,"Loadings of the first PC", line=1, font=2)
+  }
+  data.pc
+}
+```
+
+## Function for MDS
+
+```{r}
+do.mds <- function(dataset,lbls,do.scatter=T) {
+  data.dist = dist(dataset)
+  data.mds = cmdscale(data.dist)
+  if (do.scatter) {
+    plot(data.mds, type = 'n')
+    text(data.mds,labels=lbls,cex=0.8)       
+    mtext(side=3,"MDS map", line=1, font=2)
+  }
+  data.mds
+}
+```
+
+## Functions for k-means and hierarchical clustering 
+
+```{r}
+do.kmeans <- function(dataset,lbls,k=4,do.scatter=F) {
+  set.seed(123)
+  data.clu = kmeans(dataset, centers=k, nstart=10)
+  if (do.scatter) {
+    plot(dataset,type='n')
+    text(dataset,labels=lbls,col=rainbow(k)[data.clu$cluster])    
+  }
+  data.clu
+}
+do.hclust <- function(dataset,lbls,k=4,do.dendrogram=T,do.method='complete') {
+  data.dist = dist(dataset)
+  hc = hclust(data.dist,method=do.method) ## change method to be single, complete, average, etc.
+  if (do.dendrogram) {
+    plot(hc)
+  }
+  hc1 = cutree(hc,k)
+  print(hc1)
+  hc1
+}
+do.mds.plot <- function(data.mds, cluster){
+  plot(data.mds, type="n")
+  text(data.mds, labels, col=rainbow(6)[cluster])
+}
+```
+
+## 1) Use PCA to reduce the dimension of unemployment-rate information. Generate a screeplot and determine the number of principle components based on this plot. Plot the loadings for first principal component.
+
+## 2) Generate a scatterplot to project states on the first two principal components
+
+```{r}
+  dataset = load.data.states()
+  labels = rownames(dataset)
+  data.pc = do.pca(dataset, labels, do.screeplot=T, do.scatter=T,do.loadingplot=T)
+```
+
+## 3) Generate an MDS map to plot states on a two-dimensional space.
+
+```{r}
+  data.stand = t(scale(t(dataset)))
+  data.mds = do.mds(data.stand,labels)
+```
+
+## 4) Use k-means and hierarchical clustering to group states. Specifically, you will generate 8 MDS maps for the states and color the states based on different clustering methods (k-means, h-clustering with single-link, h-clustering with complete-link, h-clustering with average-link) and different number of clusters (k = 4, k = 8). For each hierarchical clustering method, generate a dendrogram.
+
+```{r}
+  # K-Means (k=4)
+  kmeans_4 = do.kmeans(data.pc, labels)$cluster
+  # h-clustering with single-link (k=4)
+  hclust_4_single = do.hclust(data.pc, labels, do.dendrogram = T, do.method='single')
+  # h-clustering with complete-link (k=4)
+  hclust_4_complete = do.hclust(data.pc, labels, do.dendrogram = T, do.method='complete')
+  # h-clustering with average-link (k=4)
+  hclust_4_average = do.hclust(data.pc, labels, do.dendrogram = T, do.method='average')
+  # K-Means (k=8)
+  kmeans_8 = do.kmeans(data.pc, labels, k=8)$cluster
+  # h-clustering with single-link (k=8)
+  hclust_8_single = do.hclust(data.pc, labels, k=8, do.dendrogram = T, do.method='single')
+  # h-clustering with complete-link (k=8)
+  hclust_8_complete = do.hclust(data.pc, labels, k=8, do.dendrogram = T, do.method='complete')
+  # h-clustering with average-link (k=8)
+  hclust_8_average = do.hclust(data.pc, labels, k=8, do.dendrogram = T, do.method='average')
+  
+  # MDS plots
+  do.mds.plot(data.pc,kmeans_4)
+  do.mds.plot(data.pc,hclust_4_single)
+  do.mds.plot(data.pc,hclust_4_complete)
+  do.mds.plot(data.pc,hclust_4_average)
+  do.mds.plot(data.pc,kmeans_8)
+  do.mds.plot(data.pc,hclust_8_single)
+  do.mds.plot(data.pc,hclust_8_complete)
+  do.mds.plot(data.pc,hclust_8_average)
+```
+
+## 5) Based on your observation, choose two clustering results (from the 8 solutions) that are most meaningful and explain why.
+
+```{r}
+hist(kmeans_4)
+hist(hclust_4_single)
+hist(hclust_4_complete)
+hist(hclust_4_average)
+hist(kmeans_8)
+hist(hclust_8_single)
+hist(hclust_8_complete)
+hist(hclust_8_average)
+```
+
+
+## Task 2
+
+## Loading Data set for Task 2
+```{r}
+rollcall.simplified <- function(df) {
+  no.pres <- subset(df, state < 99)
+  ## to group all Yea and Nay types together
+  for(i in 10:ncol(no.pres)) {
+    no.pres[,i] = ifelse(no.pres[,i] > 6, 0, no.pres[,i])
+    no.pres[,i] = ifelse(no.pres[,i] > 0 & no.pres[,i] < 4, 1, no.pres[,i])
+    no.pres[,i] = ifelse(no.pres[,i] > 1, -1, no.pres[,i])
+  }
+  
+  return(as.matrix(no.pres[,10:ncol(no.pres)]))
+}
+
+library('foreign') ## for loading dta files using read.dta
+library('ggplot2')
+library('plyr') # for recoding data
+theme_set( theme_bw( base_family="Helvetica")) 
+
+theme_update(plot.title = element_text( size=11,vjust=1,face='bold'),
+             axis.title.x = element_text( size=12),
+             axis.title.y = element_text( size=12,angle=90 ),
+             axis.text.x = element_text( size=10),
+             axis.text.y = element_text( size=10,hjust=1 ))
+
+load.roll.call <- function(congr=13) { ## extract the 13th congress data by default
+  data.url = 'http://www.yurulin.com/class/spring2017_datamining/data/roll_call/'
+  data.files = c("sen101kh.dta", "sen102kh.dta",
+                 "sen103kh.dta", "sen104kh.dta",
+                 "sen105kh.dta", "sen106kh.dta",
+                 "sen107kh.dta", "sen108kh_7.dta",
+                 "sen109kh.dta", "sen110kh_2008.dta",
+                 "sen111kh.dta",  "sen112kh.dta",
+                 "sen113kh.dta" )
+  dataset = read.dta(file.path(data.url, data.files[congr]), convert.factors = FALSE)
+  dataset = subset(dataset, state < 99)
+  print(dim(dataset))
+  print(head(dataset[,1:14]))
+  dataset
+}
+
+roll.call.mds <- function(dataset,do.scatter=T,do.scatter.ggplot=T,do.clust, do.method) {
+  get.dist <- function(m) {
+    dist(m %*% t(m))
+  }
+  
+  data1 = rollcall.simplified(dataset)
+  
+  ## use either kmeans or hclust
+  if (do.clust=='kmeans') { 
+    clu = do.kmeans(data1,NULL,k=2)$cluster
+  }
+  else if (do.clust=='hclust') { 
+    clu = do.hclust(data1,NULL,k=2, do.method = do.method)
+  }
+  else {}
+  print(clu) 
+  print(dim(data1))
+  #print(head(data1[,1:12]))  
+  data.dist = get.dist(data1)   #get distance matrix
+  print(data.dist)
+  
+  lbls = dataset$name
+  party = mapvalues(dataset$party,from=c(100, 200, 328),to=c("Dem", "Rep", "Ind") )
+  data.mds = cmdscale(data.dist)
+  if (do.scatter) {
+    plot(data.mds, type = 'n')
+    text(data.mds,labels=lbls)       
+  }
+  data2 = data.frame(x=data.mds[,1],y=data.mds[,2],name=lbls,party=party,clu=factor(clu))
+  data3 = data.frame(x=data.mds[,1],y=data.mds[,2],name=lbls,party=party,clu=factor(dataset$party))
+  if (do.scatter.ggplot) {
+    p = ggplot(aes(x=x,y=y,shape=party,color=clu), data=data2) +
+      geom_point(size=4,alpha=0.5) +
+      geom_text(aes(x=x,y=y,shape=party,color=clu,label=name), size=3)
+    print(p)
+  }
+  p = ggplot(aes(x=x,y=y,shape=party,color=party), data=data3) +
+    geom_point(size=4,alpha=0.5) +
+    geom_text(aes(x=x,y=y,shape=party,color=party,label=name), size=3)
+  print(p)
+  
+  p<-cluster.purity(clu,party)
+  e<-cluster.entropy(clu,party)
+  diff<-data.frame(t(rbind(t(dataset$name), as.vector(dataset$party), as.vector(clu))))
+  list(data.mds, diff,p,e)
+}
+cluster.purity <- function(clusters, classes) {
+  sum(apply(table(classes, clusters), 2, max)) / length(clusters)
+}
+cluster.entropy <- function(clusters, classes) {
+  en <- function(x) {
+    s = sum(x)
+    sum(sapply(x/s, function(p) {if (p) -p*log2(p) else 0} ) )
+  }
+  M = table(classes, clusters)
+  m = apply(M, 2, en)
+  c = colSums(M) / sum(M)
+  sum(m*c)
+}
+```
+
+## 1) Create a senator-by-senator distance matrix for the 113th Congress. Generate an MDS plot to project the senators on the two dimensional space. Use shapes or colors to differentiate the senators' party affliation
+
+## 2) Use k-means and hierarchical clustering to group the senators, and color the senators on the MDS plots based on the clustering results (you will use k-means, h-clustering with single-link, h-clustering with complete-link, h-clustering with average-link and k=2).
+
+## 3) Compare the clustering results with the party labels and identify the party members who are assigned to a seemly wrong cluster. Specifically, based on the k-means results, which Republicans are clustered together with Democrats, and vice versa? And based on the three variants (single-link, complete-link and average-link), which Republicans are clustered together with Democrats, and vice versa?
+
+
+```{r}
+ dataset = load.roll.call() # load the data set
+ # K-Means
+ kmean<-roll.call.mds(dataset,do.scatter=T,do.scatter.ggplot=T, do.clust='kmeans')
+ # hclust average-link
+  hclust_avg<-roll.call.mds(dataset,do.scatter=T,do.scatter.ggplot=T, do.clust='hclust', do.method='average')
+  # hclust single-link
+  hclust_single<-roll.call.mds(dataset,do.scatter=T,do.scatter.ggplot=T, do.clust='hclust', do.method='single')
+  # hclust complete-link
+  hclust_complete<-roll.call.mds(dataset,do.scatter=T,do.scatter.ggplot=T, do.clust='hclust', do.method='complete')
+  
+```
+  
+## 4) Compute the purity and entropy for these clustering results with respect to the senators' party labels. You will generate a table as follows:
+
+```{r}
+  k.diff<-data.frame(kmean[2])
+  ha.diff<-data.frame(hclust_avg[2])
+  hc.diff<-data.frame(hclust_complete[2])
+  hs.diff<-data.frame(hclust_single[2])
+  k.wrong.dem<-subset(k.diff, k.diff['X3']==2&k.diff['X2']==200)['X1']
+  k.wrong.rep<-subset(k.diff, k.diff['X3']==1&k.diff['X2']==100)['X1']
+  ha.wrong.dem<-subset(ha.diff, ha.diff['X3']==2&ha.diff['X2']==200)['X1']
+  ha.wrong.rep<-subset(ha.diff, ha.diff['X3']==1&ha.diff['X2']==100)['X1']
+  hc.wrong.dem<-subset(hc.diff, hc.diff['X3']==2&hc.diff['X2']==200)['X1']
+  hc.wrong.rep<-subset(hc.diff, hc.diff['X3']==1&hc.diff['X2']==100)['X1']
+  hs.wrong.dem<-subset(hs.diff, hs.diff['X3']==2&hs.diff['X2']==200)['X1']
+  hs.wrong.rep<-subset(hs.diff, hs.diff['X3']==1&hs.diff['X2']==100)['X1']
+  purity<-c(kmean[3],hclust_single[3],hclust_complete[3],hclust_avg[3])
+  entropy<-c(kmean[4],hclust_single[4],hclust_complete[4],hclust_avg[4])
+  column.name<-c("k-means","hcluster-single", "hcluster-complete", "hcluster-average")
+  row.name<-c("Purity","Entropy")
+  summary<-matrix(c(purity,entropy), nrow=2, ncol=4, byrow=TRUE, dimnames=list(row.name, column.name))
+  summary
+  
+```
+
+
+## 5) Based on your observation on both measures and mis-classified members, choose two clustering methods that generate the most meaningful results and explain why
+
+hcluster complete-link and hcluster average-link are the best because they have high purity and low entropy.
+
+
