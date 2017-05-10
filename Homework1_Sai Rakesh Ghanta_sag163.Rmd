@@ -1,0 +1,341 @@
+---
+title: "Homework 1"
+author: "Sai Rakesh Ghanta"
+date: "January 16, 2017"
+output: word_document
+---
+## 1) Read the data description on DMR p.294. Identify and report response variable and predictors (also called explanatory variables or features).
+
+Data Description:
+
+The DirectMarketing.csv data set includes data from a direct marketer who sells his products only via direct mail. He sends catalogs with product characteristics to customers who then order directly from the catalogs. The marketer has developed customer records to learn what makes some customers spend more than others. The data set includes n = 1000 customers and the following variables: Age (of customer; old/middle/young); Gender (male/female); OwnHome (whether customer owns home; yes/no); Married (single/married); Location (far/close; in terms of distance to the nearest brick and mortar store that sells similar products); Salary (yearly salary of customer; in dollars); Children (number of children; 0- 3); History (of previous purchase volume; low/medium/high/NA; NA means that this customer has not yet purchased); Catalogs (number of catalogs sent); and AmountSpent (in dollars). The objective is to explain AmountSpent in terms of the provided customer characteristics.
+
+
+In this data set:
+
+Response Variable: AmountSpent
+
+Predictors (Explanatory Variables): Age, Gender, OwnHome, Married, Location, Salary, Children, History, Catalogs.
+
+## 2-(a) There are missing values in data. Describe how you deal with them.
+
+Generally in any data set, missing values are delegated as NA or Value 0. But in this Data Set, NA is a type in categorical variable 'History'. In this data set NA means that the customer has not purchased yet. Since NA is considered as missing values in R, I did find and replace NA with NotApp.   
+
+## 2-(b) Generate a summary table for the data. For each numerical variable, list: variable name, mean, median, 1st quartile, 3rd quartile, and standard deviation.
+
+```{r}
+
+library(ggplot2) # Loading Library: ggplot2
+
+market <- read.csv('C:/Users/Sai Rakesh Ghanta/Desktop/DirectMarketing.csv') #Data Set
+head(market)
+summary(market) #Summary of the Data set
+
+market_num <- market[c("Salary", "Children", "Catalogs", "AmountSpent")] # Numerical Variables
+rowName<-names(market_num)
+columnName<-c("Mean","Median", "1st Qu.", "3rd Qu.", "Sd")
+
+salary<-c(as.vector(summary(market_num$Salary))[c(4,3,2,5)],sd(market_num$Salary))
+
+children<-c(as.vector(summary(market_num$Children))[c(4,3,2,5)],sd(market_num$Children))
+
+catalogs<-c(as.vector(summary(market_num$Catalogs))[c(4,3,2,5)],sd(market_num$Catalogs))
+
+amount<-c(as.vector(summary(market_num$AmountSpent))[c(4,3,2,5)],sd(market_num$AmountSpent))
+
+Summary_Table<-matrix(c(salary,children,catalogs,amount), nrow=4, ncol=5, byrow=TRUE, dimnames=list(rowName, columnName))
+
+# List of variable name, mean, median, 1st quartile, and 3rd quartile.
+
+Summary_Table #Summary Table
+
+
+```
+
+## 2-(c)For numerical variables AmountSpent and Salary, plot the density distribution. Describe whether the variable has a normal distribution or certain type of skew distribution.
+
+```{r}
+# Density Distribution Plots for AmountSpent and Salary.
+
+ggplot(market, aes(x = AmountSpent)) + geom_density()
+ggplot(market, aes(x = Salary)) + geom_density()
+
+# Normal Distribution Check.
+
+qqnorm(market$AmountSpent)
+qqline(market$AmountSpent)
+qqnorm(market$Salary)
+qqline(market$Salary)
+
+shapiro.test(market$AmountSpent)
+shapiro.test(market$Salary)
+```
+
+The Normal Q-Q plot (upper right) is a probability plot of the standardized residuals against the values that would be expected under normality. If the normality assumption is met, the points on the graph should fall on the straight 45-degree line. If they don't, clearly the normality assumption is violated. So, both the variables AmountSpent and Salary does not have Normal Plot. Both have skew distribution. (right-skew) 
+
+## 2-(d)For each numerical predictor, describe its relationship with the response variable through correlation and scatterplot.
+
+
+```{r}
+# Correlation and Scatter Plots.
+
+cor(market$Salary,market$AmountSpent)
+ggplot(market, aes(x = Salary, y = AmountSpent)) + geom_point() + geom_smooth(method="lm", se=FALSE)
+
+cor(market$Children,market$AmountSpent)
+ggplot(market, aes(x = Children, y = AmountSpent)) + geom_point() + geom_smooth(method="lm", se=FALSE)
+
+cor(market$Catalogs,market$AmountSpent)
+ggplot(market, aes(x = Catalogs, y = AmountSpent)) + geom_point() + geom_smooth(method="lm", se=FALSE)
+```
+
+## 2-(e)For each categorical predictor, generate the conditional density plot of response variable.
+
+
+```{r}
+
+# Conditional Density Plots.
+
+ggplot(market, aes(x = AmountSpent, fill = Age)) + geom_density(alpha = 0.5)
+ggplot(market, aes(x = AmountSpent, fill = Gender)) + geom_density(alpha = 0.5)
+ggplot(market, aes(x = AmountSpent, fill = OwnHome)) + geom_density(alpha = 0.5)
+ggplot(market, aes(x = AmountSpent, fill = Married)) + geom_density(alpha = 0.5)
+ggplot(market, aes(x = AmountSpent, fill = Location)) + geom_density(alpha = 0.5)
+ggplot(market, aes(x = AmountSpent, fill = History)) + geom_density(alpha = 0.5)
+
+```
+
+## 2-(f)For each categorical predictor, compare and describe whether the categories have significantly different means.
+
+```{r}
+require(graphics)
+test<-aov(AmountSpent~Age,data = market)
+TukeyHSD(test,"Age", ordered = TRUE)
+plot(TukeyHSD(test,"Age"))
+
+test1<-aov(AmountSpent~Gender,data = market)
+TukeyHSD(test1,"Gender", ordered = TRUE)
+plot(TukeyHSD(test1,"Gender"))
+
+test2<-aov(AmountSpent~OwnHome,data = market)
+TukeyHSD(test2,"OwnHome", ordered = TRUE)
+plot(TukeyHSD(test2,"OwnHome"))
+
+test3<-aov(AmountSpent~Married,data = market)
+TukeyHSD(test3,"Married", ordered = TRUE)
+plot(TukeyHSD(test3,"Married"))
+test4<-aov(AmountSpent~Location,data = market)
+TukeyHSD(test4,"Location", ordered = TRUE)
+plot(TukeyHSD(test4,"Location"))
+test5<-aov(AmountSpent~History,data = market)
+TukeyHSD(test5,"History", ordered = TRUE)
+plot(TukeyHSD(test5,"History"))
+
+```
+
+Here I used the function TukeyHSD to display the differences of means for all the categories of categorical variables.
+
+## 3-(a)Use all predictors in a standard linear regression model to predict the response variable. Report the model performance using R2,adjusted R2 and RMSE. Interpret the regression result.
+
+```{r}
+
+fitA <- lm(AmountSpent ~ ., data=market)
+summary(fitA)
+
+mean.mse = mean((rep(mean(market$AmountSpent),length(market$AmountSpent)) - market$AmountSpent)^2)
+model.mse = mean(residuals(fitA)^2)
+rmse = sqrt(model.mse)
+rmse
+
+## plot the residuals and check if the residuals appear to be approximately normal
+
+plot(density(resid(fitA)))
+
+qqnorm(resid(fitA)) # a quantile normal plot 
+qqline(resid(fitA))
+
+par(mfrow=c(2,2)) # plot regression diagnostics
+plot(fitA)
+
+```
+
+The	multiple	R-squared	indicates	that	the	model	accounts	for	74.76% of	the	
+variance	in	AmountSpent. The	residual	standard	error	(485.7)	is the	average	error	in predicting	in	using	this	model.
+
+## 3-(b)Use different combination of predictors in standard linear and non-linear regression models to predict the response variable. (Here we don't consider interaction terms.) Evaluate which model performs better using out-of-sample RMSE.
+
+```{r}
+## Linear Regression
+
+# Combination A
+
+fitA <- lm(AmountSpent ~ ., data=market)
+summary(fitA)
+
+mean.mse = mean((rep(mean(market$AmountSpent),length(market$AmountSpent)) - market$AmountSpent)^2)
+model.mse = mean(residuals(fitA)^2)
+rmse = sqrt(model.mse)
+rmse
+
+n = length(market$AmountSpent)
+error = dim(n)
+for (k in 1:n) {
+  train1 = c(1:n)
+  train = train1[-k]
+  m2 = lm(AmountSpent ~ ., data = market[train,])
+  pred = predict(m2, newdata = market[-train,])
+  obs = market$AmountSpent[-train]
+  error[k] = obs - pred
+}
+fitA_me = mean(error)
+fitA_me
+fitA_rmse = sqrt(mean(error^2))
+fitA_rmse #out-of-sample RMSE
+
+library(MASS)
+fitA <- lm(AmountSpent ~ ., data=market)
+stepAIC(fitA,direction="backward")
+
+# Combination B
+
+fitB <- lm(AmountSpent ~ Gender + Location + Salary + Children + History + Catalogs, data = market)
+
+summary(fitB)
+
+mean.mse = mean((rep(mean(market$AmountSpent),length(market$AmountSpent)) - market$AmountSpent)^2)
+model.mse = mean(residuals(fitB)^2)
+rmse = sqrt(model.mse)
+rmse
+
+n = length(market$AmountSpent)
+error = dim(n)
+for (k in 1:n) {
+  train1 = c(1:n)
+  train = train1[-k]
+  m2 = lm(AmountSpent ~ Gender + Location + Salary + Children + History + Catalogs, data =  market[train,])
+  pred = predict(m2, newdata = market[-train,])
+  obs = market$AmountSpent[-train]
+  error[k] = obs - pred
+}
+fitB_me = mean(error)
+fitB_me
+fitB_rmse = sqrt(mean(error^2))
+fitB_rmse #out-of-sample RMSE
+
+# Combination C
+
+fitC <- lm(AmountSpent ~ Salary + Children + History + Catalogs, data = market)
+
+summary(fitC)
+
+mean.mse = mean((rep(mean(market$AmountSpent),length(market$AmountSpent)) - market$AmountSpent)^2)
+model.mse = mean(residuals(fitC)^2)
+rmse = sqrt(model.mse)
+rmse
+
+n = length(market$AmountSpent)
+error = dim(n)
+for (k in 1:n) {
+  train1 = c(1:n)
+  train = train1[-k]
+  m2 = lm(AmountSpent ~ Salary + Children + History + Catalogs, data = market[train,])
+  pred = predict(m2, newdata = market[-train,])
+  obs = market$AmountSpent[-train]
+  error[k] = obs - pred
+}
+fitC_me = mean(error)
+fitC_me
+fitC_rmse = sqrt(mean(error^2))
+fitC_rmse #out-of-sample RMSE
+
+## Non-Linear Regression
+
+# Poly A
+
+polyA <- lm(AmountSpent ~ Gender + Location + poly(Salary, degree = 2) + Children + History + Catalogs, data = market)
+
+summary(polyA)
+
+n = length(market$AmountSpent)
+error = dim(n)
+for (k in 1:n) {
+  train1 = c(1:n)
+  train = train1[-k]
+  m2 = lm(AmountSpent ~ Gender + Location + poly(Salary, degree = 2)+ Children + History + Catalogs, data = market[train,])
+  pred = predict(m2, newdata = market[-train,])
+  obs = market$AmountSpent[-train]
+  error[k] = obs - pred
+}
+polyA_me = mean(error)
+polyA_me
+polyA_rmse = sqrt(mean(error^2))
+polyA_rmse #out-of-sample RMSE
+
+# Poly B
+
+polyB <- lm(AmountSpent ~ Gender + Location + poly(Salary, degree = 3) + Children + History + Catalogs, data = market)
+
+summary(polyB)
+
+n = length(market$AmountSpent)
+error = dim(n)
+for (k in 1:n) {
+  train1 = c(1:n)
+  train = train1[-k]
+  m2 = lm(AmountSpent ~ Gender + Location + poly(Salary, degree = 3)+ Children + History + Catalogs, data = market[train,])
+  pred = predict(m2, newdata = market[-train,])
+  obs = market$AmountSpent[-train]
+  error[k] = obs - pred
+}
+polyB_me = mean(error)
+polyB_me
+polyB_rmse = sqrt(mean(error^2))
+polyB_rmse #out-of-sample RMSE
+
+# Poly C
+
+polyC <- lm(AmountSpent ~ Gender + Location + poly(Salary, degree = 10) + poly(Children, degree = 2) + History + Catalogs, data = market)
+
+summary(polyC)
+
+mean.mse = mean((rep(mean(market$AmountSpent),length(market$AmountSpent)) - market$AmountSpent)^2)
+model.mse = mean(residuals(polyC)^2)
+rmse = sqrt(model.mse)
+rmse
+
+n = length(market$AmountSpent)
+error = dim(n)
+for (k in 1:n) {
+  train1 = c(1:n)
+  train = train1[-k]
+  m2 = lm(AmountSpent ~ Gender + Location + poly(Salary, degree = 10) + poly(Children, degree = 2) + History + Catalogs, data =  market[train,])
+  pred = predict(m2, newdata = market[-train,])
+  obs = market$AmountSpent[-train]
+  error[k] = obs - pred
+}
+polyC_me = mean(error)
+polyC_me
+polyC_rmse = sqrt(mean(error^2))
+polyC_rmse #out-of-sample RMSE
+
+
+```
+
+By checking the RMSE values of all the combinations, I found Combination B (fitB) the best model since it has the least out-of-sample RMSE value.
+
+Best Model: lm(AmountSpent ~ Gender + Location + Salary + Children + History + Catalogs, data = market)
+
+## 3-(c)From the best model, identify the most important predictor in the model, and explain how you determine the importance of the predictors.
+
+```{r}
+
+library(MASS)
+fitB <- lm(AmountSpent ~  Gender + Location + Salary + Children + History + Catalogs, data = market)
+stepAIC(fitB,direction="backward")
+
+
+```
+
+The most important predictor is Salary because it has high R2 value and correlation with AmountSpent.
+
+By variable selection we can see, the model with predictors Gender, Location, Salary, Children, History, Catalogs is the best model.
